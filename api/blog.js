@@ -36,30 +36,45 @@ export default async function handler(req, res) {
 5. 글 맨 하단에는 네이버 검색용 고효율 해시태그 5~7개를 #형태로 추가하세요.
 
 [출력 형식]
-마크다운(\`\`\`) 기호 없이, 네이버 스마트에디터에 바로 렌더링될 수 있는 순수 HTML 코드만 출력하세요. <h1>, <h2>, <p>, <div>, <span> 태그를 활용해 시각적으로 완성도 높은 형태여야 합니다.
+마크다운 기호 없이, 네이버 스마트에디터에 바로 렌더링될 수 있는 순수 HTML 코드만 출력하세요. <h1>, <h2>, <p>, <div>, <span> 태그를 활용하세요.
 `;
 
-  try {
-    const apiRes = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-3.6-flash:generateContent?key=${apiKey}`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        contents: [{ parts: [{ text: prompt }] }]
-      })
-    });
+  // 1순위 모델과 트래픽 폭주 시 대체할 예비 모델 리스트
+  const candidateModels = [
+    'gemini-3.6-flash',
+    'gemini-2.5-flash',
+    'gemini-1.5-flash'
+  ];
 
-    const data = await apiRes.json();
-    if (data.error) {
-      return res.status(500).json({ message: "Google API 오류: " + data.error.message });
+  let lastError = null;
+
+  for (const model of candidateModels) {
+    try {
+      const apiRes = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          contents: [{ parts: [{ text: prompt }] }]
+        })
+      });
+
+      const data = await apiRes.json();
+
+      // 현재 모델이 트래픽 초과(503/429)일 경우 다음 모델로 자동 전환
+      if (data.error) {
+        lastError = data.error.message;
+        continue;
+      }
+
+      if (data.candidates && data.candidates[0] && data.candidates[0].content) {
+        let generatedHtml = data.candidates[0].content.parts[0].text;
+        generatedHtml = generatedHtml.replace(/```html/g, '').replace(/```/g, '').trim();
+        return res.status(200).json({ html: generatedHtml });
+      }
+    } catch (err) {
+      lastError = err.message;
     }
-
-    let generatedHtml = data.candidates[0].content.parts[0].text;
-    
-    // 혹시 마크다운 블록(```html)이 포함되어 반환될 경우 제거
-    generatedHtml = generatedHtml.replace(/```html/g, '').replace(/```/g, '').trim();
-
-    return res.status(200).json({ html: generatedHtml });
-  } catch (err) {
-    return res.status(500).json({ message: "서버 예외: " + err.message });
   }
+
+  return res.status(500).json({ message: "현재 모든 AI 서버 접속량이 많습니다. 5초 후 다시 시도해 주세요. (" + lastError + ")" });
 }
