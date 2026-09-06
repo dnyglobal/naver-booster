@@ -1,0 +1,127 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>네이버 블로그 C-Rank 포스팅 자동 완성기</title>
+  <style>
+    * { box-sizing: border-box; font-family: -apple-system, BlinkMacSystemFont, "Apple SD Gothic Neo", "Malgun Gothic", sans-serif; }
+    body { background-color: #f1f5f9; margin: 0; padding: 24px; color: #0f172a; }
+    .container { max-width: 900px; margin: 0 auto; background: #ffffff; border-radius: 16px; padding: 32px; box-shadow: 0 4px 20px rgba(0,0,0,0.06); }
+    h1 { font-size: 22px; font-weight: 800; color: #03c75a; display: flex; align-items: center; gap: 8px; margin-top: 0; }
+    .sub { color: #64748b; font-size: 14px; margin-bottom: 24px; }
+    label { font-weight: 700; font-size: 13px; margin-bottom: 6px; display: block; color: #334155; }
+    input, textarea, select { width: 100%; border: 1.5px solid #cbd5e1; border-radius: 8px; padding: 12px; font-size: 14px; margin-bottom: 16px; outline: none; }
+    input:focus, textarea:focus { border-color: #03c75a; }
+    .row { display: flex; gap: 12px; }
+    .row > div { flex: 1; }
+    button { width: 100%; padding: 14px; background: #03c75a; color: #ffffff; border: none; border-radius: 8px; font-size: 16px; font-weight: 700; cursor: pointer; transition: 0.2s; }
+    button:hover { background: #02b150; }
+    button:disabled { background: #94a3b8; cursor: not-allowed; }
+    .loading { display: none; text-align: center; color: #03c75a; font-weight: 700; margin: 20px 0; }
+    .result-container { display: none; margin-top: 24px; border-top: 2px solid #e2e8f0; padding-top: 24px; }
+    .result-actions { display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; }
+    .copy-btn { width: auto; padding: 8px 16px; background: #0f172a; font-size: 13px; border-radius: 6px; }
+    .copy-btn:hover { background: #334155; }
+    .preview-box { border: 1px solid #e2e8f0; border-radius: 12px; padding: 24px; background: #ffffff; min-height: 200px; line-height: 1.8; font-size: 15px; }
+  </style>
+</head>
+<body>
+
+<div class="container">
+  <h1>N 네이버 블로그 자동 완성기 (DIA+ 최적화)</h1>
+  <div class="sub">AI 티를 완전히 제거하고, 네이버 알고리즘이 좋아하는 가독성 서식으로 자동 조판합니다.</div>
+
+  <div class="row">
+    <div>
+      <label>핵심 타겟 키워드 (1순위 검색어)</label>
+      <input type="text" id="keyword" placeholder="예: 해외직구 유아 원목 교구" value="해외직구 유아 원목 교구">
+    </div>
+    <div>
+      <label>포스팅 톤앤매너</label>
+      <select id="tone">
+        <option value="mom">30대 맘블로거 (친근하고 따뜻한 솔직 후기체)</option>
+        <option value="review">전문 테크/리뷰어 (꼼꼼하고 분석적인 톤)</option>
+        <option value="info">생활 꿀팁 정보형 (핵심 요약 및 가독성 강조)</option>
+      </select>
+    </div>
+  </div>
+
+  <label>상품/주제 핵심 메모 (단어만 나열해도 자동 문맥화)</label>
+  <textarea id="notes" rows="4" placeholder="예: 몬테소리 교구, KC인증 미대상 직구 주의점, 마감 매끄러움, 가격이 백화점 대비 1/3, 2주 배송 걸림 등..."></textarea>
+
+  <button id="genBtn" onclick="generatePost()">네이버 스마트에디터 맞춤 원고 생성하기</button>
+
+  <div class="loading" id="loading">알고리즘 분석 및 블로그 전용 서식으로 조판 중입니다...</div>
+
+  <div class="result-container" id="resultArea">
+    <div class="result-actions">
+      <strong>네이버 에디터 즉시 붙여넣기용 결과물</strong>
+      <button class="copy-btn" onclick="copyFormattedText()">서식 포함 전체 복사</button>
+    </div>
+    <div class="preview-box" id="preview"></div>
+  </div>
+</div>
+
+<script>
+async function generatePost() {
+  const keyword = document.getElementById('keyword').value.trim();
+  const tone = document.getElementById('tone').value;
+  const notes = document.getElementById('notes').value.trim();
+
+  if (!keyword || !notes) {
+    alert("키워드와 내용을 입력해 주세요.");
+    return;
+  }
+
+  const btn = document.getElementById('genBtn');
+  const loading = document.getElementById('loading');
+  const resultArea = document.getElementById('resultArea');
+  const preview = document.getElementById('preview');
+
+  btn.disabled = true;
+  loading.style.display = 'block';
+  resultArea.style.display = 'none';
+
+  try {
+    const res = await fetch('/api/blog', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ keyword, tone, notes })
+    });
+
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.message || '생성 실패');
+
+    preview.innerHTML = data.html;
+    resultArea.style.display = 'block';
+  } catch (err) {
+    alert("오류: " + err.message);
+  } finally {
+    btn.disabled = false;
+    loading.style.display = 'none';
+  }
+}
+
+function copyFormattedText() {
+  const preview = document.getElementById('preview');
+  const blob = new Blob([preview.innerHTML], { type: 'text/html' });
+  const textBlob = new Blob([preview.innerText], { type: 'text/plain' });
+
+  const item = new ClipboardItem({
+    'text/html': blob,
+    'text/plain': textBlob
+  });
+
+  navigator.clipboard.write([item]).then(() => {
+    alert("서식이 유지된 상태로 복사되었습니다!\n네이버 블로그 에디터에서 바로 Ctrl+V (Cmd+V) 하세요.");
+  }).catch(() => {
+    // 구형 브라우저 fallback
+    navigator.clipboard.writeText(preview.innerText);
+    alert("텍스트가 복사되었습니다.");
+  });
+}
+</script>
+
+</body>
+</html>
